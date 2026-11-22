@@ -1,0 +1,653 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        ('email_verified' in request.auth.token &&
+         request.auth.token.email_verified == true &&
+         'email' in request.auth.token &&
+         request.auth.token.email == 'nexaadda@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isAccountBanned(userId) {
+      let userPath = /databases/$(database)/documents/users/$(userId);
+      return exists(userPath) && ('banned' in get(userPath).data) && get(userPath).data.banned == true;
+    }
+
+    function isValidAdUnitIdOrEmpty(val) {
+      return val is string && (val == '' || (val.size() <= 64 && val.matches('^ca-app-pub-[0-9]{10,20}/[0-9]{6,15}$')));
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 120)) &&
+             data.coinsBalance is int && data.coinsBalance >= 0 && data.coinsBalance <= 10000000 &&
+             data.totalCoinsEarned is int && data.totalCoinsEarned >= 0 && data.totalCoinsEarned <= 10000000 &&
+             data.dailyGamesPlayed is int && data.dailyGamesPlayed >= 0 && data.dailyGamesPlayed <= 10000000 &&
+             data.lastPlayedDate is string && data.lastPlayedDate.size() <= 10 &&
+             data.currentStreak is int && data.currentStreak >= 0 && data.currentStreak <= 3650 &&
+             data.longestStreak is int && data.longestStreak >= 0 && data.longestStreak <= 3650 &&
+             data.lastStreakClaimDate is string && data.lastStreakClaimDate.size() <= 10 &&
+             data.totalAdsWatched is int && data.totalAdsWatched >= 0 && data.totalAdsWatched <= 10000000 &&
+             data.totalGamesWon is int && data.totalGamesWon >= 0 && data.totalGamesWon <= 10000000 &&
+             data.totalGamesPlayed is int && data.totalGamesPlayed >= 0 && data.totalGamesPlayed <= 10000000 &&
+             (!('referralCode' in data) || (data.referralCode is string && data.referralCode.size() >= 6 && data.referralCode.size() <= 16)) &&
+             (!('referredByUid' in data) || data.referredByUid == null || (data.referredByUid is string && data.referredByUid.size() <= 128)) &&
+             (!('referredByCode' in data) || data.referredByCode == null || (data.referredByCode is string && data.referredByCode.size() <= 20)) &&
+             (!('referralBonusEarned' in data) || (data.referralBonusEarned is int && data.referralBonusEarned >= 0 && data.referralBonusEarned <= 10000000)) &&
+             (!('referralsCompletedCount' in data) || (data.referralsCompletedCount is int && data.referralsCompletedCount >= 0 && data.referralsCompletedCount <= 100000)) &&
+             (!('lastClaimedReferralUid' in data) || data.lastClaimedReferralUid == null || (data.lastClaimedReferralUid is string && data.lastClaimedReferralUid.size() <= 128)) &&
+             (!('goalWindowStartMillis' in data) || (data.goalWindowStartMillis is int && data.goalWindowStartMillis >= 0)) &&
+             (!('goalWindowCoins' in data) || (data.goalWindowCoins is int && data.goalWindowCoins >= 0 && data.goalWindowCoins <= 10000000)) &&
+             (!('extraEarnPotHundredths' in data) || (data.extraEarnPotHundredths is int && data.extraEarnPotHundredths >= 0 && data.extraEarnPotHundredths <= 100000000)) &&
+             (!('totalExtraEarnClaimed' in data) || (data.totalExtraEarnClaimed is int && data.totalExtraEarnClaimed >= 0 && data.totalExtraEarnClaimed <= 10000000)) &&
+             (!('bonusAdCycleProgress' in data) || (data.bonusAdCycleProgress is int && data.bonusAdCycleProgress >= 0 && data.bonusAdCycleProgress <= 2)) &&
+             (!('banned' in data) || data.banned is bool) &&
+             (!('whitelisted' in data) || data.whitelisted is bool) &&
+             (!('banReason' in data) || data.banReason == null || (data.banReason is string && data.banReason.size() <= 200)) &&
+             (!('bannedByEmail' in data) || data.bannedByEmail == null || (data.bannedByEmail is string && data.bannedByEmail.size() <= 120)) &&
+             (!('bannedAt' in data) || data.bannedAt == null || (data.bannedAt is timestamp && data.bannedAt <= request.time)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidGoalFields(inData, exData, affected, maxPotDelta) {
+      let goalChanged = affected.hasAny(['goalWindowStartMillis', 'goalWindowCoins', 'extraEarnPotHundredths']);
+      let oldPot = ('extraEarnPotHundredths' in exData) ? exData.extraEarnPotHundredths : 0;
+      return !goalChanged || (
+        inData.goalWindowStartMillis is int &&
+        inData.goalWindowStartMillis >= 0 &&
+        inData.goalWindowCoins is int &&
+        inData.goalWindowCoins >= 0 &&
+        inData.goalWindowCoins <= 10000000 &&
+        inData.extraEarnPotHundredths is int &&
+        inData.extraEarnPotHundredths >= oldPot &&
+        inData.extraEarnPotHundredths <= oldPot + maxPotDelta
+      );
+    }
+
+    function isValidMatch(data, userId) {
+      let validCoins = (data.adWatched == false && data.coinsAwarded == 0) ||
+                       (data.adWatched == true &&
+                        ((data.gameType == 'MATH_QUIZ' && data.coinsAwarded == 10) ||
+                         (data.gameType != 'MATH_QUIZ' && data.coinsAwarded == 5)));
+      return data.userId is string && data.userId == userId &&
+             data.gameType in ['TIC_TAC_TOE', 'TAP_TAP', 'MATH_QUIZ'] &&
+             data.botDifficulty in ['MEDIUM', 'ARCADE', 'EASY'] &&
+             data.outcome in ['WIN', 'LOSS', 'DRAW'] &&
+             data.levelNumber is int && data.levelNumber >= 1 && data.levelNumber <= 10000 &&
+             data.playedDate is string && data.playedDate.size() == 10 &&
+             data.adWatched is bool &&
+             data.coinsAwarded is int &&
+             validCoins &&
+             data.adSource in ['ADMOB_TEST', 'BUILTIN_TEST', 'PENDING'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRewardEvent(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.rewardType in ['MATCH_REWARD', 'DAILY_STREAK', 'WATCH_AD', 'TEST_AD', 'REFERRAL_BONUS', 'EXTRA_EARN', 'ADMIN_ADJUSTMENT'] &&
+             data.coins is int &&
+             data.coins >= 1 &&
+             ((data.rewardType in ['EXTRA_EARN', 'ADMIN_ADJUSTMENT'] && data.coins <= 10000000) ||
+              (!(data.rewardType in ['EXTRA_EARN', 'ADMIN_ADJUSTMENT']) && data.coins <= 60)) &&
+             data.adSource in ['ADMOB_TEST', 'BUILTIN_TEST', 'REFERRAL', 'EXTRA_EARN', 'ADMIN'] &&
+             data.note is string && data.note.size() >= 1 && data.note.size() <= 160 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidWithdrawalRequest(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.method in ['ESEWA_WALLET', 'BANK_ACCOUNT', 'SIM_RECHARGE'] &&
+             data.accountTitle is string && data.accountTitle.size() >= 1 && data.accountTitle.size() <= 80 &&
+             data.destination is string && data.destination.size() >= 4 && data.destination.size() <= 80 &&
+             data.coins is int && data.coins >= 5000 && data.coins <= 10000000 &&
+             data.status == 'PENDING' &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidReferralCodeEntry(data, code) {
+      return data.code is string && data.code == code &&
+             data.code.size() >= 6 && data.code.size() <= 16 &&
+             data.code.matches('^[A-Z0-9]+$') &&
+             data.ownerUid is string && data.ownerUid == request.auth.uid &&
+             data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 60 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidReferralRecord(data, inviteeUid) {
+      return data.referrerUid is string && data.referrerUid.size() >= 1 && data.referrerUid.size() <= 128 &&
+             data.referrerUid != inviteeUid &&
+             data.referrerCode is string && data.referrerCode.size() >= 6 && data.referrerCode.size() <= 16 &&
+             data.referrerName is string && data.referrerName.size() >= 1 && data.referrerName.size() <= 60 &&
+             data.inviteeUid is string && data.inviteeUid == inviteeUid &&
+             data.inviteeName is string && data.inviteeName.size() >= 1 && data.inviteeName.size() <= 60 &&
+             data.inviteeGamesCompleted is int && data.inviteeGamesCompleted >= 0 && data.inviteeGamesCompleted <= 5 &&
+             data.targetGames == 5 &&
+             data.bonusCoins == 50 &&
+             data.status in ['IN_PROGRESS', 'QUALIFIED', 'CLAIMED'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if (isOwner(userId) && isValidId(userId)) || isAdmin();
+      allow list: if isOwner(userId) || isAdmin();
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'coinsBalance', 'totalCoinsEarned',
+                         'dailyGamesPlayed', 'lastPlayedDate', 'currentStreak',
+                         'longestStreak', 'lastStreakClaimDate', 'totalAdsWatched',
+                         'totalGamesWon', 'totalGamesPlayed', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'email', 'coinsBalance', 'totalCoinsEarned',
+                         'dailyGamesPlayed', 'lastPlayedDate', 'currentStreak',
+                         'longestStreak', 'lastStreakClaimDate', 'totalAdsWatched',
+                         'totalGamesWon', 'totalGamesPlayed',
+                         'referralCode', 'referralBonusEarned', 'referralsCompletedCount',
+                         'goalWindowStartMillis', 'goalWindowCoins',
+                         'extraEarnPotHundredths', 'totalExtraEarnClaimed', 'bonusAdCycleProgress',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().coinsBalance == 0 &&
+                       incoming().totalCoinsEarned == 0 &&
+                       incoming().dailyGamesPlayed == 0 &&
+                       incoming().currentStreak == 0 &&
+                       incoming().longestStreak == 0 &&
+                       incoming().totalAdsWatched == 0 &&
+                       incoming().totalGamesWon == 0 &&
+                       incoming().totalGamesPlayed == 0 &&
+                       (!('referralBonusEarned' in incoming()) || incoming().referralBonusEarned == 0) &&
+                       (!('referralsCompletedCount' in incoming()) || incoming().referralsCompletedCount == 0) &&
+                       (!('goalWindowStartMillis' in incoming()) || incoming().goalWindowStartMillis == 0) &&
+                       (!('goalWindowCoins' in incoming()) || incoming().goalWindowCoins == 0) &&
+                       (!('extraEarnPotHundredths' in incoming()) || incoming().extraEarnPotHundredths == 0) &&
+                       (!('totalExtraEarnClaimed' in incoming()) || incoming().totalExtraEarnClaimed == 0) &&
+                       (!('bonusAdCycleProgress' in incoming()) || incoming().bonusAdCycleProgress == 0) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isValidId(userId) && (
+        (isOwner(userId) && isValidUserUpdate(userId)) ||
+        (isAdmin() && isValidAdminUserUpdate())
+      );
+
+      allow delete: if false;
+
+    function isValidAdminUserUpdate() {
+      let inData = request.resource.data;
+      let exData = resource.data;
+      let affected = inData.diff(exData).affectedKeys();
+      let isBannedAfter = ('banned' in inData) && inData.banned == true;
+      let isWhitelistedAfter = ('whitelisted' in inData) && inData.whitelisted == true;
+      return inData.userId == exData.userId &&
+             inData.createdAt == exData.createdAt &&
+             inData.updatedAt is timestamp &&
+             inData.updatedAt <= request.time &&
+             affected.hasOnly([
+               'coinsBalance', 'totalCoinsEarned',
+               'banned', 'whitelisted', 'banReason', 'bannedByEmail', 'bannedAt',
+               'updatedAt'
+             ]) &&
+             inData.coinsBalance is int &&
+             inData.coinsBalance >= 0 &&
+             inData.coinsBalance <= 10000000 &&
+             inData.totalCoinsEarned is int &&
+             inData.totalCoinsEarned >= 0 &&
+             inData.totalCoinsEarned <= 10000000 &&
+             (!('banned' in inData) || inData.banned is bool) &&
+             (!('whitelisted' in inData) || inData.whitelisted is bool) &&
+             !(isBannedAfter && isWhitelistedAfter) &&
+             (!('banReason' in inData) || inData.banReason == null || (inData.banReason is string && inData.banReason.size() <= 200)) &&
+             (!('bannedByEmail' in inData) || inData.bannedByEmail == null || (inData.bannedByEmail is string && inData.bannedByEmail.size() <= 120)) &&
+             (!('bannedAt' in inData) || inData.bannedAt == null || (inData.bannedAt is timestamp && inData.bannedAt <= request.time));
+    }
+
+    function isValidUserUpdate(userId) {
+      let inData = request.resource.data;
+      let exData = resource.data;
+      let affected = inData.diff(exData).affectedKeys();
+      return (!('banned' in exData) || exData.banned != true) &&
+             !affected.hasAny(['banned', 'whitelisted', 'banReason', 'bannedByEmail', 'bannedAt']) &&
+             inData.userId == exData.userId &&
+             inData.createdAt == exData.createdAt &&
+             inData.updatedAt is timestamp &&
+             inData.updatedAt <= request.time &&
+             (
+               // Action: SyncProfile
+               (
+                 affected.hasOnly(['displayName', 'email', 'updatedAt']) &&
+                 inData.displayName is string &&
+                 inData.displayName.size() >= 1 &&
+                 inData.displayName.size() <= 60 &&
+                 (!('email' in inData) || inData.email == null || (inData.email is string && inData.email.size() <= 120))
+               ) ||
+               // Action: InitReferralFields (one-time backfill for legacy profiles)
+               (
+                 !('referralCode' in exData) &&
+                 affected.hasOnly([
+                   'displayName', 'email', 'referralCode', 'referralBonusEarned', 'referralsCompletedCount', 'updatedAt'
+                 ]) &&
+                 inData.displayName is string && inData.displayName.size() >= 1 && inData.displayName.size() <= 60 &&
+                 inData.referralCode is string && inData.referralCode.size() >= 6 && inData.referralCode.size() <= 16 &&
+                 inData.referralBonusEarned == 0 &&
+                 inData.referralsCompletedCount == 0
+               ) ||
+               // Action: ApplyReferralCode (atomically creates /referrals/{userId})
+               (
+                 (!('referredByUid' in exData) || exData.referredByUid == null || exData.referredByUid == '') &&
+                 exData.totalGamesPlayed < 5 &&
+                 affected.hasOnly(['referredByUid', 'referredByCode', 'updatedAt']) &&
+                 inData.referredByUid is string &&
+                 inData.referredByUid != userId &&
+                 inData.referredByCode is string &&
+                 inData.referredByCode.size() >= 6 &&
+                 inData.referredByCode.size() <= 16 &&
+                 get(/databases/$(database)/documents/referralCodes/$(inData.referredByCode)).data.ownerUid == inData.referredByUid &&
+                 getAfter(/databases/$(database)/documents/referrals/$(userId)).data.referrerUid == inData.referredByUid
+               ) ||
+               // Action: ClaimReferralBonus (atomically flips /referrals/{inviteeUid} QUALIFIED -> CLAIMED)
+               (
+                 affected.hasOnly([
+                   'coinsBalance', 'totalCoinsEarned', 'referralBonusEarned',
+                   'referralsCompletedCount', 'lastClaimedReferralUid', 'updatedAt'
+                 ]) &&
+                 inData.coinsBalance == exData.coinsBalance + 50 &&
+                 inData.totalCoinsEarned == exData.totalCoinsEarned + 50 &&
+                 inData.referralBonusEarned == (('referralBonusEarned' in exData) ? exData.referralBonusEarned : 0) + 50 &&
+                 inData.referralsCompletedCount == (('referralsCompletedCount' in exData) ? exData.referralsCompletedCount : 0) + 1 &&
+                 inData.lastClaimedReferralUid is string &&
+                 isClaimableReferralDoc(inData.lastClaimedReferralUid, userId)
+               ) ||
+               // Action: RecordMatchAndReward
+               (
+                 affected.hasOnly([
+                   'coinsBalance', 'totalCoinsEarned', 'dailyGamesPlayed', 'lastPlayedDate',
+                   'totalAdsWatched', 'totalGamesWon', 'totalGamesPlayed',
+                   'goalWindowStartMillis', 'goalWindowCoins', 'extraEarnPotHundredths', 'updatedAt'
+                 ]) &&
+                 inData.coinsBalance is int &&
+                 inData.coinsBalance >= exData.coinsBalance &&
+                 inData.coinsBalance <= exData.coinsBalance + 10 &&
+                 inData.totalCoinsEarned is int &&
+                 inData.totalCoinsEarned >= exData.totalCoinsEarned &&
+                 inData.totalCoinsEarned <= exData.totalCoinsEarned + 10 &&
+                 inData.dailyGamesPlayed is int &&
+                 inData.dailyGamesPlayed >= 0 &&
+                 inData.dailyGamesPlayed <= 10000000 &&
+                 inData.lastPlayedDate is string &&
+                 inData.lastPlayedDate.size() <= 10 &&
+                 inData.totalAdsWatched is int &&
+                 inData.totalGamesWon is int &&
+                 inData.totalGamesPlayed is int &&
+                 isValidGoalFields(inData, exData, affected, 50)
+               ) ||
+               // Action: ClaimStreakAd
+               (
+                 affected.hasOnly([
+                   'coinsBalance', 'totalCoinsEarned', 'currentStreak',
+                   'longestStreak', 'lastStreakClaimDate', 'totalAdsWatched',
+                   'goalWindowStartMillis', 'goalWindowCoins', 'extraEarnPotHundredths', 'updatedAt'
+                 ]) &&
+                 inData.coinsBalance is int &&
+                 inData.coinsBalance > exData.coinsBalance &&
+                 inData.coinsBalance <= exData.coinsBalance + 60 &&
+                 inData.totalCoinsEarned is int &&
+                 inData.totalCoinsEarned > exData.totalCoinsEarned &&
+                 inData.totalCoinsEarned <= exData.totalCoinsEarned + 60 &&
+                 inData.currentStreak is int &&
+                 inData.longestStreak is int &&
+                 inData.lastStreakClaimDate is string &&
+                 inData.lastStreakClaimDate != exData.lastStreakClaimDate &&
+                 inData.totalAdsWatched is int &&
+                 isValidGoalFields(inData, exData, affected, 300)
+               ) ||
+               // Action: WatchBonusAd (includes post-match pending ad claim & 3-ad +15 coin bundle)
+               (
+                 affected.hasOnly([
+                   'coinsBalance', 'totalCoinsEarned', 'totalAdsWatched', 'bonusAdCycleProgress',
+                   'goalWindowStartMillis', 'goalWindowCoins', 'extraEarnPotHundredths', 'updatedAt'
+                 ]) &&
+                 inData.coinsBalance is int &&
+                 inData.coinsBalance >= exData.coinsBalance &&
+                 inData.coinsBalance <= exData.coinsBalance + 15 &&
+                 inData.totalCoinsEarned is int &&
+                 inData.totalCoinsEarned >= exData.totalCoinsEarned &&
+                 inData.totalCoinsEarned <= exData.totalCoinsEarned + 15 &&
+                 inData.totalAdsWatched is int &&
+                 (!('bonusAdCycleProgress' in inData) || (inData.bonusAdCycleProgress is int && inData.bonusAdCycleProgress >= 0 && inData.bonusAdCycleProgress <= 2)) &&
+                 (!('bonusAdCycleProgress' in affected) || inData.bonusAdCycleProgress == 0 || (inData.coinsBalance == exData.coinsBalance && inData.totalCoinsEarned == exData.totalCoinsEarned)) &&
+                 isValidGoalFields(inData, exData, affected, 75)
+               ) ||
+               // Action: ClaimExtraEarnPot
+               isValidClaimExtraEarnPot(inData, exData, affected) ||
+               // Action: WithdrawCoins
+               (
+                 affected.hasOnly(['coinsBalance', 'updatedAt']) &&
+                 inData.coinsBalance is int &&
+                 inData.coinsBalance >= 0 &&
+                 inData.coinsBalance < exData.coinsBalance
+               )
+             );
+    }
+
+    function isClaimableReferralDoc(inviteeUid, referrerUid) {
+      let refDoc = get(/databases/$(database)/documents/referrals/$(inviteeUid)).data;
+      return refDoc.referrerUid == referrerUid &&
+             refDoc.status == 'QUALIFIED' &&
+             refDoc.inviteeGamesCompleted >= 5 &&
+             getAfter(/databases/$(database)/documents/referrals/$(inviteeUid)).data.status == 'CLAIMED';
+    }
+
+    function isValidClaimExtraEarnPot(inData, exData, affected) {
+      let claimedCoins = inData.coinsBalance - exData.coinsBalance;
+      let oldPot = ('extraEarnPotHundredths' in exData) ? exData.extraEarnPotHundredths : 0;
+      let oldClaimed = ('totalExtraEarnClaimed' in exData) ? exData.totalExtraEarnClaimed : 0;
+      return affected.hasOnly([
+               'coinsBalance', 'totalCoinsEarned', 'extraEarnPotHundredths',
+               'totalExtraEarnClaimed', 'goalWindowStartMillis', 'goalWindowCoins', 'updatedAt'
+             ]) &&
+             (!affected.hasAny(['goalWindowStartMillis', 'goalWindowCoins']) ||
+              (inData.goalWindowStartMillis is int &&
+               inData.goalWindowStartMillis >= 0 &&
+               inData.goalWindowCoins == 0)) &&
+             inData.coinsBalance is int &&
+             claimedCoins > 0 &&
+             claimedCoins <= 100000 &&
+             inData.totalCoinsEarned is int &&
+             inData.totalCoinsEarned == exData.totalCoinsEarned + claimedCoins &&
+             inData.extraEarnPotHundredths is int &&
+             inData.extraEarnPotHundredths >= 0 &&
+             inData.extraEarnPotHundredths == oldPot - (claimedCoins * 100) &&
+             inData.totalExtraEarnClaimed is int &&
+             inData.totalExtraEarnClaimed == oldClaimed + claimedCoins;
+    }
+      match /matches/{matchId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(matchId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         !isAccountBanned(userId) &&
+                         isValidId(userId) &&
+                         isValidId(matchId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'gameType', 'botDifficulty', 'outcome', 'levelNumber',
+                           'playedDate', 'coinsAwarded', 'adWatched', 'adSource',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'gameType', 'botDifficulty', 'outcome', 'levelNumber',
+                           'playedDate', 'coinsAwarded', 'adWatched', 'adSource',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidMatch(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         !isAccountBanned(userId) &&
+                         isValidId(userId) &&
+                         isValidId(matchId) &&
+                         isValidMatch(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().adWatched == false &&
+                         incoming().adWatched == true &&
+                         ((existing().gameType == 'MATH_QUIZ' && incoming().coinsAwarded == 10) ||
+                          (existing().gameType != 'MATH_QUIZ' && incoming().coinsAwarded == 5)) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'adWatched', 'coinsAwarded', 'adSource', 'updatedAt'
+                         ]);
+
+        allow delete: if false;
+      }
+
+      match /rewards/{rewardId} {
+        allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId) && isValidId(rewardId);
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(userId) &&
+                         isValidId(rewardId) &&
+                         ((isOwner(userId) && !isAccountBanned(userId) && incoming().rewardType != 'ADMIN_ADJUSTMENT') || isAdmin()) &&
+                         incoming().keys().hasAll([
+                           'userId', 'rewardType', 'coins', 'adSource', 'note', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'rewardType', 'coins', 'adSource', 'note', 'createdAt'
+                         ]) &&
+                         isValidRewardEvent(incoming(), userId);
+
+        allow update, delete: if false;
+      }
+
+      match /withdrawals/{withdrawalId} {
+        allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId) && isValidId(withdrawalId);
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isOwner(userId) &&
+                         !isAccountBanned(userId) &&
+                         isValidId(userId) &&
+                         isValidId(withdrawalId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'method', 'accountTitle', 'destination', 'coins', 'status', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'method', 'accountTitle', 'destination', 'coins', 'status', 'createdAt'
+                         ]) &&
+                         isValidWithdrawalRequest(incoming(), userId);
+
+        allow update: if isAdmin() &&
+                         isValidId(userId) &&
+                         isValidId(withdrawalId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().coins == existing().coins &&
+                         incoming().method == existing().method &&
+                         incoming().accountTitle == existing().accountTitle &&
+                         incoming().destination == existing().destination &&
+                         incoming().status in ['PENDING', 'COMPLETED', 'FAILED'] &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'status', 'adminNote', 'processedByEmail', 'processedAt'
+                         ]) &&
+                         (!('adminNote' in incoming()) || incoming().adminNote == null || (incoming().adminNote is string && incoming().adminNote.size() <= 160)) &&
+                         (!('processedByEmail' in incoming()) || incoming().processedByEmail == null || (incoming().processedByEmail is string && incoming().processedByEmail.size() <= 120)) &&
+                         (!('processedAt' in incoming()) || (incoming().processedAt is timestamp && incoming().processedAt <= request.time));
+
+        allow delete: if false;
+      }
+    }
+
+    match /referralCodes/{code} {
+      allow get: if isSignedIn() && isValidId(code);
+      allow list: if false;
+      allow create: if isSignedIn() &&
+                       isValidId(code) &&
+                       incoming().keys().hasAll(['code', 'ownerUid', 'ownerName', 'createdAt']) &&
+                       incoming().keys().hasOnly(['code', 'ownerUid', 'ownerName', 'createdAt']) &&
+                       isValidReferralCodeEntry(incoming(), code);
+      allow update, delete: if false;
+    }
+
+    match /referrals/{inviteeUid} {
+      allow get: if isSignedIn() &&
+                    isValidId(inviteeUid) &&
+                    (request.auth.uid == inviteeUid || resource.data.referrerUid == request.auth.uid);
+      allow list: if isSignedIn() &&
+                     (resource.data.referrerUid == request.auth.uid || resource.data.inviteeUid == request.auth.uid);
+
+      allow create: if isOwner(inviteeUid) &&
+                       !isAccountBanned(inviteeUid) &&
+                       isValidId(inviteeUid) &&
+                       incoming().keys().hasAll([
+                         'referrerUid', 'referrerCode', 'referrerName',
+                         'inviteeUid', 'inviteeName', 'inviteeGamesCompleted',
+                         'targetGames', 'bonusCoins', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'referrerUid', 'referrerCode', 'referrerName',
+                         'inviteeUid', 'inviteeName', 'inviteeGamesCompleted',
+                         'targetGames', 'bonusCoins', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidReferralRecord(incoming(), inviteeUid) &&
+                       incoming().inviteeGamesCompleted < 5 &&
+                       incoming().status == 'IN_PROGRESS';
+
+      allow update: if isSignedIn() &&
+                       !isAccountBanned(request.auth.uid) &&
+                       isValidId(inviteeUid) &&
+                       isValidReferralRecord(incoming(), inviteeUid) &&
+                       incoming().referrerUid == existing().referrerUid &&
+                       incoming().referrerCode == existing().referrerCode &&
+                       incoming().referrerName == existing().referrerName &&
+                       incoming().inviteeUid == existing().inviteeUid &&
+                       incoming().targetGames == existing().targetGames &&
+                       incoming().bonusCoins == existing().bonusCoins &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (
+                           request.auth.uid == existing().inviteeUid &&
+                           existing().status == 'IN_PROGRESS' &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'inviteeGamesCompleted', 'status', 'updatedAt'
+                           ]) &&
+                           incoming().inviteeGamesCompleted == existing().inviteeGamesCompleted + 1 &&
+                           incoming().inviteeGamesCompleted <= 5 &&
+                           (
+                             (incoming().inviteeGamesCompleted < 5 && incoming().status == 'IN_PROGRESS') ||
+                             (incoming().inviteeGamesCompleted == 5 && incoming().status == 'QUALIFIED')
+                           )
+                         ) ||
+                         (
+                           request.auth.uid == existing().referrerUid &&
+                           existing().status == 'QUALIFIED' &&
+                           existing().inviteeGamesCompleted >= 5 &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+                           incoming().status == 'CLAIMED'
+                         )
+                       );
+
+      allow delete: if false;
+    }
+
+    // CollectionGroup query for Admin Panel withdrawals queue across all users
+    match /{path=**}/withdrawals/{withdrawalId} {
+      allow read: if isAdmin();
+    }
+
+    // Admin unlock registry validated by cryptographic SHA-256 digest (never stores plaintext password)
+    match /admins/{userId} {
+      allow get, list: if false;
+      allow create, update: if isOwner(userId) &&
+                               isValidId(userId) &&
+                               incoming().keys().hasAll(['uid', 'passDigest', 'createdAt']) &&
+                               incoming().keys().hasOnly(['uid', 'passDigest', 'createdAt']) &&
+                               incoming().uid == userId &&
+                               incoming().passDigest is string &&
+                               incoming().passDigest.size() == 64 &&
+                               hashing.sha256(incoming().passDigest) == b"\xa6\xdb\xcf\xd4\x77\x44\xc7\x76\xfd\x82\xd7\x85\xd5\x58\xeb\xa1\x13\xfe\x5f\x3a\x21\xd3\x67\x48\xbf\x53\xb9\x2f\xe1\x7e\x9c\x89" &&
+                               incoming().createdAt is timestamp &&
+                               incoming().createdAt <= request.time;
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+
+    // Live app configuration: WhatsApp support, Terms & Conditions, AdMob units, announcements, maintenance mode
+    match /appConfig/{configId} {
+      allow get: if isSignedIn() && configId == 'main';
+      allow list: if false;
+      allow create, update: if isAdmin() &&
+                               configId == 'main' &&
+                               incoming().keys().hasAll([
+                                 'whatsappSupportNumber', 'termsAndConditions', 'maintenanceMode', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'whatsappSupportNumber', 'whatsappPrefillMessage', 'termsAndConditions',
+                                 'announcementTitle', 'announcementBody', 'maintenanceMode', 'maintenanceMessage',
+                                 'supportHours', 'rewardedAdUnitId', 'bannerAdUnitId',
+                                 'savedRewardedAdUnitIds', 'savedBannerAdUnitIds',
+                                 'updatedByEmail', 'updatedAt'
+                               ]) &&
+                               incoming().whatsappSupportNumber is string &&
+                               incoming().whatsappSupportNumber.size() >= 7 &&
+                               incoming().whatsappSupportNumber.size() <= 20 &&
+                               (!('whatsappPrefillMessage' in incoming()) || (incoming().whatsappPrefillMessage is string && incoming().whatsappPrefillMessage.size() <= 200)) &&
+                               incoming().termsAndConditions is string &&
+                               incoming().termsAndConditions.size() >= 1 &&
+                               incoming().termsAndConditions.size() <= 20000 &&
+                               (!('announcementTitle' in incoming()) || (incoming().announcementTitle is string && incoming().announcementTitle.size() <= 120)) &&
+                               (!('announcementBody' in incoming()) || (incoming().announcementBody is string && incoming().announcementBody.size() <= 400)) &&
+                               incoming().maintenanceMode is bool &&
+                               (!('maintenanceMessage' in incoming()) || (incoming().maintenanceMessage is string && incoming().maintenanceMessage.size() <= 300)) &&
+                               (!('supportHours' in incoming()) || (incoming().supportHours is string && incoming().supportHours.size() <= 80)) &&
+                               (!('rewardedAdUnitId' in incoming()) || isValidAdUnitIdOrEmpty(incoming().rewardedAdUnitId)) &&
+                               (!('bannerAdUnitId' in incoming()) || isValidAdUnitIdOrEmpty(incoming().bannerAdUnitId)) &&
+                               (!('savedRewardedAdUnitIds' in incoming()) || (incoming().savedRewardedAdUnitIds is list && incoming().savedRewardedAdUnitIds.size() <= 20)) &&
+                               (!('savedBannerAdUnitIds' in incoming()) || (incoming().savedBannerAdUnitIds is list && incoming().savedBannerAdUnitIds.size() <= 20)) &&
+                               (!('updatedByEmail' in incoming()) || incoming().updatedByEmail == null || (incoming().updatedByEmail is string && incoming().updatedByEmail.size() <= 120)) &&
+                               incoming().updatedAt is timestamp &&
+                               incoming().updatedAt <= request.time;
+      allow delete: if false;
+    }
+
+    // Custom live push notifications sent by Admin (to ALL or specific targetUid)
+    match /notifications/{notificationId} {
+      allow get, list: if isAdmin() ||
+                          (isSignedIn() && resource.data.targetUid in ['ALL', request.auth.uid]);
+      allow create: if isAdmin() &&
+                       isValidId(notificationId) &&
+                       incoming().keys().hasAll([
+                         'title', 'body', 'targetType', 'targetUid', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'title', 'body', 'targetType', 'targetUid', 'targetEmail', 'sentByEmail', 'createdAt'
+                       ]) &&
+                       incoming().title is string &&
+                       incoming().title.size() >= 1 &&
+                       incoming().title.size() <= 120 &&
+                       incoming().body is string &&
+                       incoming().body.size() >= 1 &&
+                       incoming().body.size() <= 500 &&
+                       incoming().targetType in ['ALL', 'USER'] &&
+                       incoming().targetUid is string &&
+                       incoming().targetUid.size() >= 1 &&
+                       incoming().targetUid.size() <= 128 &&
+                       ((incoming().targetType == 'ALL' && incoming().targetUid == 'ALL') ||
+                        (incoming().targetType == 'USER' && incoming().targetUid != 'ALL')) &&
+                       (!('targetEmail' in incoming()) || incoming().targetEmail == null || (incoming().targetEmail is string && incoming().targetEmail.size() <= 120)) &&
+                       (!('sentByEmail' in incoming()) || incoming().sentByEmail == null || (incoming().sentByEmail is string && incoming().sentByEmail.size() <= 120)) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+  }
+}

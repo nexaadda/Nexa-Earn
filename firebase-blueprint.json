@@ -1,0 +1,490 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated NexaEarn player wallet, daily level quota, and streak state.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name shown in the wallet header."
+        },
+        "email": {
+          "type": "string",
+          "description": "Optional user email from Google Sign-In."
+        },
+        "coinsBalance": {
+          "type": "integer",
+          "description": "Current NexaEarn coin balance."
+        },
+        "totalCoinsEarned": {
+          "type": "integer",
+          "description": "Lifetime coins earned."
+        },
+        "dailyGamesPlayed": {
+          "type": "integer",
+          "description": "Number of Tic Tac Toe levels played on lastPlayedDate (unlimited per day)."
+        },
+        "lastPlayedDate": {
+          "type": "string",
+          "description": "Local date string (yyyy-MM-dd) of last match."
+        },
+        "currentStreak": {
+          "type": "integer",
+          "description": "Consecutive days of daily streak ad claims."
+        },
+        "longestStreak": {
+          "type": "integer",
+          "description": "Best consecutive daily streak achieved."
+        },
+        "lastStreakClaimDate": {
+          "type": "string",
+          "description": "Local date string (yyyy-MM-dd) of last daily streak ad claim."
+        },
+        "totalAdsWatched": {
+          "type": "integer",
+          "description": "Total rewarded ads completed."
+        },
+        "bonusAdCycleProgress": {
+          "type": "integer",
+          "description": "Completed ads toward the 3-ad Watch Ads bundle (0..2); resets to 0 on the 3rd ad when +15 coins are awarded."
+        },
+        "totalGamesWon": {
+          "type": "integer",
+          "description": "Total Tic Tac Toe matches won."
+        },
+        "totalGamesPlayed": {
+          "type": "integer",
+          "description": "Total Tic Tac Toe matches completed."
+        },
+        "referralCode": {
+          "type": "string",
+          "description": "Unique uppercase referral code owned by this user."
+        },
+        "referredByUid": {
+          "type": "string",
+          "description": "Optional UID of the friend who referred this user."
+        },
+        "referredByCode": {
+          "type": "string",
+          "description": "Optional referral code applied by this user."
+        },
+        "referralBonusEarned": {
+          "type": "integer",
+          "description": "Total bonus coins earned from completed friend referrals."
+        },
+        "referralsCompletedCount": {
+          "type": "integer",
+          "description": "Number of invited friends who completed their first 5 games."
+        },
+        "lastClaimedReferralUid": {
+          "type": "string",
+          "description": "Most recent invitee UID whose referral bonus was claimed."
+        },
+        "goalWindowStartMillis": {
+          "type": "integer",
+          "description": "Epoch millis when the current 24-hour 100-coin goal window started."
+        },
+        "goalWindowCoins": {
+          "type": "integer",
+          "description": "Coins earned from Daily Streak, mini games, and Watch Ads in the current 24-hour window."
+        },
+        "extraEarnPotHundredths": {
+          "type": "integer",
+          "description": "Accumulated 5% Extra Earn pot stored in 1/100th coin units (100 = 1 coin)."
+        },
+        "totalExtraEarnClaimed": {
+          "type": "integer",
+          "description": "Lifetime Extra Earn coins claimed into the main wallet balance."
+        },
+        "banned": {
+          "type": "boolean",
+          "description": "Whether the user has been banned/blacklisted by an Admin."
+        },
+        "whitelisted": {
+          "type": "boolean",
+          "description": "Whether the user has been explicitly whitelisted as a trusted account by an Admin."
+        },
+        "banReason": {
+          "type": "string",
+          "description": "Optional reason shown when a user is banned/blacklisted."
+        },
+        "bannedByEmail": {
+          "type": "string",
+          "description": "Optional admin email that applied the ban."
+        },
+        "bannedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user was banned/blacklisted."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on update."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "coinsBalance",
+        "totalCoinsEarned",
+        "dailyGamesPlayed",
+        "lastPlayedDate",
+        "currentStreak",
+        "longestStreak",
+        "lastStreakClaimDate",
+        "totalAdsWatched",
+        "totalGamesWon",
+        "totalGamesPlayed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GameMatch": {
+      "title": "GameMatch",
+      "description": "Completed mini-game round record (Tic Tac Toe, Tap Tap, or Math Quiz) and post-match ad status.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "gameType": {
+          "type": "string",
+          "enum": ["TIC_TAC_TOE", "TAP_TAP", "MATH_QUIZ"],
+          "description": "Mini-game identifier."
+        },
+        "botDifficulty": {
+          "type": "string",
+          "enum": ["MEDIUM", "ARCADE", "EASY"],
+          "description": "Game mode / difficulty level."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["WIN", "LOSS", "DRAW"],
+          "description": "Match result."
+        },
+        "levelNumber": {
+          "type": "integer",
+          "description": "Game level or round number."
+        },
+        "playedDate": {
+          "type": "string",
+          "description": "Local date string (yyyy-MM-dd)."
+        },
+        "coinsAwarded": {
+          "type": "integer",
+          "description": "Coins credited for this round (5 for Tic Tac Toe/Tap Tap, 10 for Math Quiz after watching rewarded ad, 0 if skipped)."
+        },
+        "adWatched": {
+          "type": "boolean",
+          "description": "Whether the required post-match rewarded ad was completed."
+        },
+        "adSource": {
+          "type": "string",
+          "enum": ["ADMOB_TEST", "BUILTIN_TEST", "PENDING"],
+          "description": "Source of the rewarded ad served."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "gameType",
+        "botDifficulty",
+        "outcome",
+        "levelNumber",
+        "playedDate",
+        "coinsAwarded",
+        "adWatched",
+        "adSource",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RewardEvent": {
+      "title": "RewardEvent",
+      "description": "Immutable ledger entry for coins earned via rewarded ads, daily streaks, matches, and referrals.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "rewardType": {
+          "type": "string",
+          "enum": ["MATCH_REWARD", "DAILY_STREAK", "WATCH_AD", "TEST_AD", "REFERRAL_BONUS", "EXTRA_EARN", "ADMIN_ADJUSTMENT"],
+          "description": "Category of reward."
+        },
+        "coins": {
+          "type": "integer",
+          "description": "Number of coins awarded."
+        },
+        "adSource": {
+          "type": "string",
+          "enum": ["ADMOB_TEST", "BUILTIN_TEST", "REFERRAL", "EXTRA_EARN", "ADMIN"],
+          "description": "Rewarded ad, referral, Extra Earn pot, or Admin source."
+        },
+        "note": {
+          "type": "string",
+          "description": "Human-readable description of the reward event."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "rewardType",
+        "coins",
+        "adSource",
+        "note",
+        "createdAt"
+      ]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "User coin withdrawal request to eSewa Wallet, Bank Account, or SIM Card Recharge.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["ESEWA_WALLET", "BANK_ACCOUNT", "SIM_RECHARGE"],
+          "description": "Selected withdrawal method."
+        },
+        "accountTitle": {
+          "type": "string",
+          "description": "Account holder name, bank name, or mobile carrier."
+        },
+        "destination": {
+          "type": "string",
+          "description": "eSewa ID, bank account number, or mobile phone number."
+        },
+        "coins": {
+          "type": "integer",
+          "description": "Coins deducted for this withdrawal request."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "COMPLETED", "FAILED"],
+          "description": "Withdrawal status managed from PENDING -> COMPLETED or FAILED by Admin."
+        },
+        "adminNote": {
+          "type": "string",
+          "description": "Optional admin review note."
+        },
+        "processedByEmail": {
+          "type": "string",
+          "description": "Optional admin email that reviewed the request."
+        },
+        "processedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when Admin processed the request."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "method",
+        "accountTitle",
+        "destination",
+        "coins",
+        "status",
+        "createdAt"
+      ]
+    },
+    "ReferralCodeEntry": {
+      "title": "ReferralCodeEntry",
+      "description": "Publicly resolvable referral code lookup mapping a user's invite code to their UID and display name.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "ownerUid", "ownerName", "createdAt"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Tracks an invited friend's first 5 games and bonus payout status for the referrer.",
+      "type": "object",
+      "properties": {
+        "referrerUid": { "type": "string" },
+        "referrerCode": { "type": "string" },
+        "referrerName": { "type": "string" },
+        "inviteeUid": { "type": "string" },
+        "inviteeName": { "type": "string" },
+        "inviteeGamesCompleted": { "type": "integer" },
+        "targetGames": { "type": "integer" },
+        "bonusCoins": { "type": "integer" },
+        "status": {
+          "type": "string",
+          "enum": ["IN_PROGRESS", "QUALIFIED", "CLAIMED"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "referrerUid",
+        "referrerCode",
+        "referrerName",
+        "inviteeUid",
+        "inviteeName",
+        "inviteeGamesCompleted",
+        "targetGames",
+        "bonusCoins",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Live remote configuration updated from Admin Panel (WhatsApp support, Terms & Conditions, announcements, maintenance mode).",
+      "type": "object",
+      "properties": {
+        "whatsappSupportNumber": { "type": "string" },
+        "whatsappPrefillMessage": { "type": "string" },
+        "termsAndConditions": { "type": "string" },
+        "announcementTitle": { "type": "string" },
+        "announcementBody": { "type": "string" },
+        "maintenanceMode": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string" },
+        "supportHours": { "type": "string" },
+        "rewardedAdUnitId": {
+          "type": "string",
+          "description": "Active Google AdMob Rewarded Ad Unit ID (empty when removed/disabled)."
+        },
+        "bannerAdUnitId": {
+          "type": "string",
+          "description": "Active Google AdMob Banner Ad Unit ID (empty when removed/disabled)."
+        },
+        "savedRewardedAdUnitIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Saved pool of Google AdMob Rewarded Ad Unit IDs managed by Admin."
+        },
+        "savedBannerAdUnitIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Saved pool of Google AdMob Banner Ad Unit IDs managed by Admin."
+        },
+        "updatedByEmail": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["whatsappSupportNumber", "termsAndConditions", "maintenanceMode", "updatedAt"]
+    },
+    "AdminNotification": {
+      "title": "AdminNotification",
+      "description": "Live custom push notification sent by Admin to all users or a specific user.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["ALL", "USER"] },
+        "targetUid": { "type": "string" },
+        "targetEmail": { "type": "string" },
+        "sentByEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "body", "targetType", "targetUid", "createdAt"]
+    },
+    "AdminSession": {
+      "title": "AdminSession",
+      "description": "Admin authorization record unlocked via SHA-256 verified admin key.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "passDigest": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "passDigest", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "User wallet profile, daily level count, streak state, and referral counters."
+    },
+    "/users/{userId}/matches/{matchId}": {
+      "schema": {
+        "$ref": "#/entities/GameMatch"
+      },
+      "description": "User's Tic Tac Toe match history and post-match rewarded ad completion state."
+    },
+    "/users/{userId}/rewards/{rewardId}": {
+      "schema": {
+        "$ref": "#/entities/RewardEvent"
+      },
+      "description": "User's immutable coin reward history ledger."
+    },
+    "/users/{userId}/withdrawals/{withdrawalId}": {
+      "schema": {
+        "$ref": "#/entities/WithdrawalRequest"
+      },
+      "description": "User's coin withdrawal/payout request records."
+    },
+    "/referralCodes/{code}": {
+      "schema": {
+        "$ref": "#/entities/ReferralCodeEntry"
+      },
+      "description": "Referral code lookup table keyed by uppercase invite code."
+    },
+    "/referrals/{inviteeUid}": {
+      "schema": {
+        "$ref": "#/entities/ReferralRecord"
+      },
+      "description": "Per-invitee referral milestone record tracking progress toward first 5 games."
+    },
+    "/appConfig/{configId}": {
+      "schema": {
+        "$ref": "#/entities/AppConfig"
+      },
+      "description": "Live remote configuration document (/appConfig/main)."
+    },
+    "/notifications/{notificationId}": {
+      "schema": {
+        "$ref": "#/entities/AdminNotification"
+      },
+      "description": "Live custom push notifications sent from Admin Panel to all or specific users."
+    },
+    "/admins/{userId}": {
+      "schema": {
+        "$ref": "#/entities/AdminSession"
+      },
+      "description": "Admin session document protected by hash verification in Firestore Rules."
+    }
+  }
+}

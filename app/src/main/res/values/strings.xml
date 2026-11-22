@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">NexaEarn</string>
+    <string name="tagline">Play Smart. Watch Ads. Earn Coins.</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_play">Play</string>
+    <string name="nav_referral">Referral</string>
+    <string name="nav_history">History</string>
+    <string name="nav_wallet">Wallet</string>
+    <string name="nav_profile">Profile</string>
+    <string name="adblock_detected_title">Ad Blocker Detected</string>
+    <string name="adblock_detected_desc">NexaEarn relies on rewarded ads to fund coin payouts. Disable Private DNS, ad-blocking VPNs, or host blockers to continue playing and earning.</string>
+    <string name="rescan_network">Re-scan Network</string>
+</resources>
